@@ -1,0 +1,2 @@
+Datasættene fylder en del og uploades derfor ikke på GitHub.
+De bør gerne hentes automatisk ved første kørsel af main.py.
