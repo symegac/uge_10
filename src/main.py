@@ -137,6 +137,7 @@ def main() -> None:
     model = set_up_model(model_path=model_path)
 
     # Opretter optimizer og loss-funktion
+    # Adam er bedre end den gamle
     optimizer = optim.Adam(
         params=model.parameters(),
         lr=learning_rate

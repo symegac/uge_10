@@ -2,7 +2,7 @@
 
 ## Introduktion
 Der er i dette to-ugers projekt tre forskellige opgaver.
-Den første er supervised learning på MNIST-datasættet, hvor man ud fra taggede billeder skal træne en model, der kan genkende og kategorisere håndskrevne tal.
+Den første er supervised learning på MNIST-datasættet, hvor man ud fra taggede billeder skal træne en model, der kan genkende og kategorisere tøjtyper.
 I den anden opgave skal man lave en model, der kan løse Wordle-opgaver.
 
 ## Setup
