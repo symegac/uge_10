@@ -1,7 +1,20 @@
 {
-    "epochs": 5,
-    "learning_rate": 1e-3,
-    "batch_size": 64,
-    "data_dir": "data",
-    "model_file": "model.pt"
+    "fashionmnist": {
+        "epochs": 5,
+        "learning_rate": 1e-3,
+        "batch_size": 64,
+        "data_dir": "data",
+        "model_file": "fashionmnist.pt"
+    },
+    "wordle": {
+        "batch_size": 128,
+        "gamma": 0.99,
+        "eps_start": 0.9,
+        "eps_end": 0.05,
+        "eps_decay": 1000,
+        "tau": 0.005,
+        "learning_rate": 1e-4,
+        "data_dir": "data",
+        "model_file": "wordle.pt"
+    }
 }
