@@ -4,16 +4,17 @@ import enum
 import random
 from collections import Counter
 from string import ascii_lowercase
-from math import ceil, floor, log10
+from math import ceil, log10
 
 # TODO: hent ordlister for andre længder ord
+# TODO: spil mod maskinen og/eller mod AI'en
 
 # Parametre som AI skal optimere
 DEFAULT_GUESSES: list[str] = ["toner", "dashi"] # fra 0 til 5 elementer # standard: toner dashi
-DEFAULT_THRESHOLD: int = 2 # fra 1 til .word_length()+1 # standard: 2
+DEFAULT_THRESHOLD: int = 3 # fra 1 til .word_length()+1 # standard: 2
 CANDIDATE_THRESHOLD: int = 100 # fra 1 til # standard: 100
 # d_g: ["toner", "dashi"], d_t: 2, c_t: 100
-# {'all': 3.9719222462203025, '10e-3': 2.5, '10e-4': 2.9607843137254903, '10e-5': 3.468235294117647, '10e-6': 3.9676646706586824, '10e-7': 4.26530612244898, '10e-8': 4.719298245614035}
+# {'all': 3.876889848812095, '10e-3': 2.5, '10e-4': 2.9607843137254903, '10e-5': 3.428235294117647, '10e-6': 3.9005988023952094, '10e-7': 4.133253301320528, '10e-8': 4.394736842105263}
 
 def load_words(
     data_dir: str = "data",
@@ -38,10 +39,11 @@ class Wordle:
 
     def __init__(
         self,
-        word: str = None,
-        dictionary: str = None,
+        word: str | None = None,
+        dictionary: dict[str, float] | None = None,
+        allowed_guesses: int = 6,
         *,
-        valid_chars: str = None,
+        valid_chars: str | None = None,
     ) -> None:
         # Regler
         self.valid_chars = tuple(set(valid_chars)) if valid_chars is not None else self.letters
@@ -50,6 +52,7 @@ class Wordle:
         self.word_length = len(self.word)
         # Historik
         self.rounds = 0
+        self.allowed_guesses = allowed_guesses
         self.history = []
         self.guess = ''
         # Resultat
@@ -59,18 +62,39 @@ class Wordle:
     def get_random_word(self) -> str:
         return random.choice(list(self.dictionary.keys()))
 
-    def log(self):
-        return "->".join([guess for guess in self.history])
+    def log(self, colorize: bool = True):
+        return '\n'.join([self.colorize_guess(guess) if colorize else guess for guess in self.history])
 
-    def current(self):
+    def colorize_guess(self, guess: str) -> str:
+        colorized = ''
+        for i, letter in enumerate(guess):
+            if letter not in self.valid_chars:
+                colorized += f"\033[30m{letter}\u001B[0m"
+                continue
+            status = self.result[i][letter]
+            # Grøn hvis korrekt
+            if status == State.correct_letter:
+                colorized += f"\033[32m{letter}\u001B[0m"
+            # Gul hvis halvt korrekt
+            elif status == State.letter_in_wrong_pos:
+                colorized += f"\033[33m{letter}\u001B[0m"
+            else:
+                colorized += letter
+        return colorized
+
+    def current(self) -> list[str]:
         return [self.found.get(k, '.') for k in range(self.word_length)]
 
-    def guess_word(self):
-        guess = input("Indtast et ord på 5 bogstaver").strip()
+    def guess_word(self) -> str | bool:
+        if self.rounds >= self.allowed_guesses:
+            return False
+        guess = input("Indtast et ord på 5 bogstaver: ").strip()
         if len(guess) != self.word_length:
             guess = guess[:5]
+        if all(char in self.valid_chars for char in guess):
+            return self.compare(guess)
 
-    def compare(self, guess: str) -> None:
+    def compare(self, guess: str) -> str:
         self.guess = guess
         self.history.append(self.guess)
         self.rounds += 1
@@ -85,18 +109,30 @@ class Wordle:
             # Definer som 1
             elif l in self.word:
                 self.result[p].setdefault(l, State.letter_in_wrong_pos)
-        return self.current()
+        return self.log()
+
+    def play(self) -> None:
+        # TODO: tjek ud fra self.found istf. self.guess
+        while self.guess != self.word:
+            result = self.guess_word()
+            if result:
+                print(result)
+            else:
+                input(f"GAME OVER! Ordet var {self.word}.")
+                break
+        else:
+            input(f"TILLYKKE! Du gættede ordet {self.word} på {self.rounds} gæt.")
 
 class WordleSolver(Wordle):
     freq = tuple("etaoinshrdlcumwfgypbvkjxqz")
 
     def __init__(
         self,
-        word: str = None,
-        dictionary: str = None,
+        word: str | None = None,
+        dictionary: dict[str, float] | None = None,
         *,
-        valid_chars: str = None,
-        frequency: str = None,
+        valid_chars: str | None = None,
+        frequency: str | None = None,
         default_guesses: list[str] = [],
         default_threshold: int = 2,
         candidate_threshold: int = 100
@@ -117,18 +153,55 @@ class WordleSolver(Wordle):
         self.candidate_threshold = candidate_threshold
         # Beregning
         self.pattern = ''
-        self.candidates = []
         self.guess = ''
         # Resultat
         self.result = {k: {} for k in range(self.word_length)}
         self.found = {}
         self.lost = []
 
+    @property
+    def candidates(self) -> list[str]:
+        return self._find_candidates()
+
     def generate_random(self) -> str:
         guess = []
-        for n in range(self.word_length):
+        for _ in range(self.word_length):
             guess.append(random.choice(self.valid_chars))
         return ''.join(guess)
+
+    def default_guess(self) -> str:
+        """Gætter med de foruddefinerede ord."""
+        return self.default_guesses[self.rounds]
+    
+    def logic_guess(self) -> str | None:
+        """Gætter med det mest frekvente ord fra kandidatlisten, som ikke allerede er blevet brugt, og som indeholder """
+        for candidate in self.candidates:
+            if candidate not in self.history:
+                return candidate
+
+    def wfreq_cand_guess(self) -> str:
+        """Gætter med det mest frekvente ord fra kandidatlisten."""
+        pass
+
+    def lfreq_cand_guess(self) -> str:
+        """Gætter med ordet med mest frekvente bogstaver fra kandidatlisten."""
+        pass
+
+    def rand_cand_guess(self) -> str:
+        """Gætter med et tilfældigt ord fra kandidatlisten."""
+        return random.choice(self.candidates)
+
+    def wfreq_dict_guess(self) -> str:
+        """Gætter med det mest frekvente ord fra listen over gyldige inputs."""
+        pass
+
+    def lfreq_dict_guess(self) -> str:
+        """Gætter med ordet med mest frekvente bogstaver fra listen over gyldige inputs."""
+        pass
+
+    def rand_dict_guess(self) -> str:
+        """Gætter med et tilfældigt ord fra listen over gyldige inputs."""
+        return random.choice(self.dictionary.keys())
 
     def generate_guess(self) -> str:
         # Angivne standardgæt
@@ -136,35 +209,9 @@ class WordleSolver(Wordle):
             if len(self.lost) < DEFAULT_THRESHOLD:
                 return self.default_guesses[self.rounds]
         # Efter ordfrekvens
-        candidates = self.find_candidates()
-        if len(self.candidates) < CANDIDATE_THRESHOLD:
-            for candidate in candidates:
-                if candidate not in self.history:
-                    return candidate
-        # Fallback-gæt efter resultater og bogstavfrekvens
-        # TODO: Ud fra fonotaks? (https://en.wikipedia.org/wiki/English_phonology#Phonotactics)
-        guess = []
-        while ''.join(guess) not in candidates:
-            guess.clear()
-            for n in range(self.word_length):
-                # Indsætter allerede fundne bogstaver
-                if self.found.get(n, False):
-                    guess.append(self.found[n])
-                    continue
-                # Indsætter bogstav, der stod på forkert plads i tidligere gæt
-                if self.lost and self.result[n].get(self.lost[-1], None) not in (State.letter_not_in_word, State.letter_in_wrong_pos):
-                    guess.append(self.lost.pop())
-                    continue
-                # Indsætter efter bogstavfrekvens
-                for i, lt in enumerate(self.inventory):
-                    if self.result[i].get(lt, None) not in (State.letter_not_in_word, State.letter_in_wrong_pos):
-                        guess.append(lt)
-                        break
-                # Indsætter tilfældigt bogstav (burde ikke nå hertil)
-                if len(guess) <= n:
-                    guess.append(random.choice(self.inventory))
-            
-        return ''.join(guess)
+        for candidate in self.candidates:
+            if candidate not in self.history:
+                return candidate
 
     def compare(self, guess: str) -> None:
         self.guess = guess
@@ -189,7 +236,7 @@ class WordleSolver(Wordle):
                 if l not in self.lost and l not in self.found.values(): #len(self.found) < 4:
                     self.lost.append(l)
 
-    def find_candidates(self):
+    def _find_candidates(self):
         pattern = r''
         for n in range(self.word_length):
             # Hvis fem unikke værdier udgør lost&found
@@ -197,17 +244,13 @@ class WordleSolver(Wordle):
                 pattern += f"{self.found.get(n, f"[{''.join(self.lost)}]")}"
                 continue
             # Tjekker gyldige bogstaver på denne placering
-            spot_check = tuple(char for char in self.inventory if self.result[n].get(char, None) not in (State.letter_not_in_word, State.letter_in_wrong_pos))
+            spot_check = {char for char in self.inventory if self.result[n].get(char, None) not in (State.letter_not_in_word, State.letter_in_wrong_pos)}
             pattern += f"{self.found.get(n, f"[{''.join(spot_check)}]")}"
         self.pattern = pattern
-        candidates = [word for word in self.dictionary if re.match(pattern, word)]
+        candidates = tuple(word for word in self.dictionary if re.match(pattern, word))
         # Fjerner kandidater, der ikke indeholder kendte tegn m. ukendt placering
-        false_hope = [index for index, candidate in enumerate(candidates) for letter in self.lost if letter not in candidate]
-        for index, candidate in enumerate(candidates):
-            for letter in self.lost:
-                if letter not in candidate:
-                    false_hope.append(index)
-        candidates = [candidate for index, candidate in enumerate(candidates) if index not in false_hope]
+        false_hope = {index for index, candidate in enumerate(candidates) for letter in self.lost if letter not in candidate}
+        candidates = {candidate for index, candidate in enumerate(candidates) if index not in false_hope}
         # print(len(self.dictionary), len(candidates))
         # sort regex result first by lost
         # then by frequency
@@ -216,7 +259,7 @@ class WordleSolver(Wordle):
         occurrence = lambda x: -self.dictionary[x]
         return sorted(candidates, key=occurrence)
 
-    def solve(self, full: bool = False):
+    def solve(self, full: bool = False, colorize: bool = True):
         while self.guess != self.word:
             if full:
                 msg = f"{self.rounds + 1}. gæt"
@@ -224,7 +267,7 @@ class WordleSolver(Wordle):
                 print(msg)
                 print(len(msg) * '-')
 
-            candidates = self.find_candidates()
+            candidates = self.candidates
 
             if full:
                 if len(candidates) < 11:
@@ -235,12 +278,15 @@ class WordleSolver(Wordle):
             guess = self.generate_guess()
             self.compare(guess)
 
-            found = self.current()
-            lost = ','.join([char for char in self.lost])
-            print(f"[ {''.join(found)} ] <{lost}>")
             if full:
-                print(f"gæt: '{self.guess}'\nlog: {self.log()}")
-        print(f"LØST! Ordet var '{self.word}'. Det tog {self.rounds} gæt at løse.")
+                found = ''.join([(f"\033[32m{l}\u001B[0m" if l != '.' else l) if colorize else l for l in self.current()])
+                lost = ','.join([f"\033[33m{char}\u001B[0m" if colorize else char for char in self.lost])
+                print(f"[ {found} ] <{lost}>")
+                print(f"gæt: '{self.guess}'\nlog: {self.log(colorize=colorize)}")
+            else:
+                print(self.colorize_guess(guess) if colorize else guess)
+        if full:
+            print(f"LØST! Ordet var '{self.word}'. Det tog {self.rounds} gæt at løse.")
 
 
 # Most frequent letters in English
@@ -270,11 +316,14 @@ def freq_exp(frequency: str) -> int | str:
         freq = float(frequency)
     except:
         raise ValueError("Frekvensen skal kunne laves til en float.")
-    
+
     if freq:
         return ceil(abs(log10(freq)))
     else:
         return "hapax_legomenon"
+
+def freq_distribution(word_list: dict[str, float]) -> Counter:
+    return Counter(freq_exp(word_list[word]) for word in word_list)
 
 def counter_avg(counter: Counter) -> float:
     return sum(key * count for key, count in counter.items()) / counter.total()
@@ -286,37 +335,41 @@ if __name__ == "__main__":
     total = len(words)
     # Ord, der er gyldige inddata
     testing_words = load_words()
+    testwords = list(testing_words.keys())
+    testtotal = len(testwords)
 
-    freq = Counter()
-    for word in training_words:
-        exp = freq_exp(training_words[word])
-        freq[exp] += 1
+    training_freq = freq_distribution(training_words)
+    testing_freq = freq_distribution(testing_words)
 
-    print(freq)
+    print(training_freq, testing_freq)
     input()
 
     solve_steps = {"all": Counter(), "hapax_legomenon": Counter()}
     solve_steps.update({k: Counter() for k in range(2,13)})
 
-    for i, word in enumerate(words):
+    wm = Wordle()
+    wm.play()
+
+    for i, word in enumerate(testwords):
         wg = WordleSolver(
             word=word,
-            dictionary=training_words,
+            dictionary=testing_words,
             default_guesses=DEFAULT_GUESSES,
             default_threshold=DEFAULT_THRESHOLD,
             candidate_threshold=CANDIDATE_THRESHOLD
         )
-        exp = freq_exp(training_words[wg.word])
-        print(f"{i+1}/{total}")
-        while wg.guess != wg.word:
-            candidates = wg.find_candidates()
-            guess = wg.generate_guess()
-            wg.compare(guess)
+        exp = freq_exp(testing_words[wg.word])
+        print(f"{i+1}/{testtotal}")
+        wg.solve(full=False, colorize=True)
+        # while wg.guess != wg.word:
+        #     candidates = wg.find_candidates()
+        #     guess = wg.generate_guess()
+        #     wg.compare(guess)
         solve_steps["all"][wg.rounds] += 1
         solve_steps[exp][wg.rounds] += 1
-        # if wg.rounds > 7:
+        # if wg.rounds > 5:
         #     input(wg.history)
-    
+
     stats = {}
     for counter in solve_steps:
         if len(solve_steps[counter]):
