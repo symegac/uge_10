@@ -1,15 +1,15 @@
 import os
 import json
 import torch
-import pickle
 from torch import accelerator, optim, nn
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 from network import NeuralNetwork
+from pickle import UnpicklingError
 
 GLOBALS = [getattr, nn.Linear, nn.ReLU, nn.Sequential, nn.Flatten, NeuralNetwork]
 
-class WeightsUnpicklingError(pickle.UnpicklingError):
+class WeightsUnpicklingError(UnpicklingError):
     pass
 
 def load_data(root: str, batch_size: int) -> tuple[DataLoader]:
@@ -110,7 +110,7 @@ def test_loop(
             pred = model(x)
             test_loss += loss_fn(pred, y).item()
             correct += (pred.argmax(1) == y).type(torch.float).sum().item()
-        
+
         test_loss /= num_batches
         correct /= size
         print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
@@ -128,8 +128,8 @@ def save_model(model: nn.Module, model_path: str) -> None:
 
 def main() -> None:
     # Config
-    config: dict[str, int | float] = json.load(open("config.json"))
-    epochs, learning_rate, batch_size, data_dir, model_file = config.values()
+    config: dict[str, dict[str, int | float]] = json.load(open("config.json"))
+    epochs, learning_rate, batch_size, data_dir, model_file = config["fashionmnist"].values()
     model_path = os.path.join(data_dir, "output", model_file)
 
     # Setup
