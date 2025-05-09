@@ -3,7 +3,6 @@ from torch import nn
 class DQN(nn.Module):
     def __init__(self, n_observations, n_actions) -> None:
         super(DQN, self).__init__()
-        self.flatten = nn.Flatten()
         self.network_stack = nn.Sequential(
             nn.Linear(in_features=n_observations, out_features=128),
             nn.ReLU(),
@@ -13,6 +12,5 @@ class DQN(nn.Module):
         )
 
     def forward(self, x):
-        x = self.flatten(x)
         output = self.network_stack(x)
         return output

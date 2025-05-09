@@ -1,8 +1,4 @@
 from tabulate import tabulate
-import pandas as pd
-
-WORD_LENGTH = 5
-ALLOWED_GUESSES = 6
 
 class Rewards:
     def __init__(
@@ -21,18 +17,20 @@ class Rewards:
     ) -> int | None:
         if guesses is None:
             guesses = self.allowed_guesses
-        if green is None and yellow is not None:
-            green = 0
-        elif yellow is None:
-            green = self.word_length
+        if green is None:
+            if yellow is None:
+                green = self.word_length
+            else:
+                green = 0
         if yellow is None:
             yellow = 0
 
         if not all(isinstance(param, int) for param in (guesses, green, yellow)):
             raise TypeError("Alle inddata skal være heltal.")
 
-        if guesses < 0 or guesses > self.allowed_guesses:
-            raise ValueError(f"Antal gæt kan kun være heltal fra 1 til {self.allowed_guesses}.")
+        if guesses < 1 or guesses > self.allowed_guesses:
+            print(f"Antal gæt kan kun være heltal fra 1 til {self.allowed_guesses}, ikke {guesses}.") # ValueError
+            guesses = 6
 
         # Hvis alle bogstaver er grønne og antal gæt er inden for det tilladte,
         # så beregnes belønning
@@ -66,18 +64,15 @@ class Rewards:
         green: int,
         yellow: int,
     ) -> int:
-        return 2 * green - (self.word_length - (green + yellow)) - 2 * self.word_length
+        gray = self.word_length - green - yellow
+        return 2 * green - gray - 2 * self.word_length
 
     def generate_reward_table(
         self,
         format: bool = False,
         **kwargs
     ) -> dict[int, int] | str:
-        table = {}
-        for guesses in range(1, self.allowed_guesses + 1):
-            reward = self._calculate_reward(guesses)
-            table.setdefault(guesses, reward)
-
+        table = {guesses: self._calculate_reward(guesses) for guesses in range(1, self.allowed_guesses + 1)}
         if format:
             table = tabulate((table.keys(), table.values()), **kwargs)
         return table
@@ -103,7 +98,7 @@ class Rewards:
         return table
 
 if __name__ == "__main__":
-    rewards = Rewards(5, 6)
+    rewards = Rewards(word_length=5, allowed_guesses=6)
     markdown_fmt = {
         "headers":    "keys",
         "showindex":  True,
@@ -115,9 +110,9 @@ if __name__ == "__main__":
     rtable = rewards.generate_reward_table(format=True, tablefmt="pipe", headers="firstrow")
     ptable = rewards.generate_punishment_table(format=True, **markdown_fmt)
     print(rtable, ptable, sep='\n')
-    print(rewards.get(3, 5, 0)) # 3 gæt, alt korrekt
-    print(rewards.get(6, 2, 1)) # 6 gæt, 2 grønne, 1 gul
-    print(rewards.get())        # 6 gæt, alt korrekt
-    print(rewards.get(2))       # 2 gæt, alt korrekt
-    print(rewards.get(6, 4))    # 6 gæt, 4 grønne
-    print(rewards.get(yellow=4))# 6 gæt, 0 grønne, 4 gule
+    print(rewards.get(3, 5, 0)) # 3 gæt, alt korrekt        =  12
+    print(rewards.get(6, 2, 1)) # 6 gæt, 2 grønne, 1 gul    =  -8
+    print(rewards.get())        # 6 gæt, alt korrekt        =   5
+    print(rewards.get(2))       # 2 gæt, alt korrekt        =  20
+    print(rewards.get(6, 4))    # 6 gæt, 4 grønne           =  -3
+    print(rewards.get(yellow=4))# 6 gæt, 0 grønne, 4 gule   = -11
