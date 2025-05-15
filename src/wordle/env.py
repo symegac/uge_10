@@ -1,8 +1,11 @@
 import numpy as np
 import gymnasium as gym
 from gymnasium.spaces import Dict, Discrete, OneOf, Sequence, Text, Tuple
+from collections import namedtuple
 from game import WordleSolver
 from rewards import Rewards
+
+Step = namedtuple("Step", ("observation", "reward", "terminated", "truncated", "info"))
 
 class Char(Text):
     def __init__(self, charset: str):
@@ -39,6 +42,7 @@ class WordleEnv(gym.Env):
         self._charmin = min(self._game.valid_chars)
         self._charmax = max(self._game.valid_chars)
 
+        # Passer ikke længere efter at have lavet tensors og kun have brugt 'result' som obs
         self.observation_space = Dict({
             # tuple[dict[str, int]]
             "result": Tuple(tuple(
@@ -86,13 +90,14 @@ class WordleEnv(gym.Env):
         )
         self._action_to_strategy = {
             0: self._game.default_guess,
-            1: self._game.logic_guess,
-            2: self._game.wfreq_cand_guess,
-            3: self._game.lfreq_cand_guess,
-            4: self._game.rand_cand_guess,
-            5: self._game.wfreq_dict_guess,
-            6: self._game.lfreq_dict_guess,
-            7: self._game.rand_dict_guess
+            1: self._game.rand_default_guess,
+            2: self._game.logic_guess,
+            3: self._game.rand_logic_guess,
+            4: self._game.stat_guess,
+            5: self._game.rand_stat_guess,
+            6: self._game.brute_guess,
+            7: self._game.rand_brute_guess,
+            8: self._game.rand_guess
         }
 
         observation = self._get_obs()
@@ -147,7 +152,7 @@ if __name__ == "__main__":
     # print(fenv.step(0))
 
     env = WordleEnv(
-        # render="ansi",
+        render="ansi",
         default_guesses=["toner", "dashi"]
     )
     for _ in range(50):

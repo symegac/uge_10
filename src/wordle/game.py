@@ -188,71 +188,92 @@ class WordleSolver(Wordle):
     # action 0
     def default_guess(self) -> str:
         """Gætter med foruddefinerede ord."""
-        if self.default_guesses and self.rounds < len(self.default_guesses):
-            return self.default_guesses[self.rounds]
+        if self.default_guesses:
+            if self.rounds < len(self.default_guesses):
+                return self.default_guesses[self.rounds]
+            else:
+                return self.rand_default_guess(referred=True)
         else:
-            return self.rand_cand_guess()
+            return self.rand_guess()
 
     # action 1
-    def logic_guess(self) -> str | None:
-        """Gætter med det mest frekvente ord fra kandidatlisten, som ikke allerede er blevet brugt, og som indeholder """
-        # if self.green == 4:
-        #     candidate = ''
-        #     backup = [char for char in self.inventory]
-        #     while candidate not in self.dictionary:
-        #         candidate = ''.join(char if char else self.inventory[0] for char in self.found)
-        #         if len(self.inventory) == 1:
-        #             candidate = ''
-        #             self.inventory = backup
-        #             break
-        #         self.inventory.pop(0)
-        #     if candidate:
-        #         return candidate
-        if self.lost and self.green + len(self.lost) == self.word_length:
-            pattern = self._lost_and_found()
+    def rand_default_guess(self, referred: bool = False) -> str:
+        if self.default_guesses or referred:
+            return random.choice(self.default_guesses)
         else:
-            pattern = self._find_candidates()
-        candidate_list = self._generate_candidate_list(pattern)
-        if self.lost:
-            candidate_list = self._check_candidate_list(candidate_list)
-        self.candidates = self._sort_candidate_list(candidate_list)
+            return self.rand_guess()
 
+    # action 2
+    def logic_guess(self) -> str:
+        """Gætter med det mest frekvente ord fra kandidatlisten, som ikke allerede er blevet brugt,
+        og som kan lade sig gøre ud fra forrige resultater."""
+        self._logic_guess()
+        # Find første kandidat, der ikke allerede er blevet gættet
         for candidate in self.candidates:
             if candidate not in self.history:
                 return candidate
         else:
-            return "error"
-
-    # action 2
-    def wfreq_cand_guess(self) -> str:
-        """Gætter med det mest frekvente ord fra kandidatlisten."""
-        return self.logic_guess()
+            return self.rand_logic_guess(referred=True)
 
     # action 3
-    def lfreq_cand_guess(self) -> str:
-        """Gætter med ordet med mest frekvente bogstaver fra kandidatlisten."""
-        return self.logic_guess()
-
-    # action 4
-    def rand_cand_guess(self) -> str:
-        """Gætter med et tilfældigt ord fra kandidatlisten."""
-        self.candidates = list(self._generate_candidate_list(self._find_basic_candidates()))
+    def rand_logic_guess(self, referred: bool = False) -> str:
+        """Gætter med et tilfældigt ord fra kandidatlisten, som ikke allerede er blevet brugt,
+        og som kan lade sig gøre ud fra forrige resultater."""
+        if not referred:
+            self._logic_guess()
         return random.choice(self.candidates)
 
+    # action 4
+    def stat_guess(self) -> str:
+        """Gætter med det mest frekvente ord fra kandidatlisten,
+        som kan lade sig gøre ud fra forrige resultater."""
+        self.candidates = self._sort_candidate_list(self._generate_candidate_list(self._find_candidates()))
+        if self.candidates:
+            return self.candidates[0]
+        else:
+            return self.rand_stat_guess(referred=True)
+
+    # def lfreq_cand_guess(self) -> str:
+    #     """Gætter med ordet med mest frekvente bogstaver fra kandidatlisten."""
+    #     return self.logic_guess()
+
     # action 5
-    def wfreq_dict_guess(self) -> str:
-        """Gætter med det mest frekvente ord fra listen over gyldige inputs."""
-        return self.logic_guess()
+    def rand_stat_guess(self, referred: bool = False) -> str:
+        """Gætter med et tilfældigt ord fra kandidatlisten,
+        som kan lade sig gøre ud fra forrige resultater."""
+        if not referred:
+            self.candidates = list(self._generate_candidate_list(self._find_candidates()))
+        return random.choice(self.candidates)
 
     # action 6
-    def lfreq_dict_guess(self) -> str:
-        """Gætter med ordet med mest frekvente bogstaver fra listen over gyldige inputs."""
-        return self.logic_guess()
+    def brute_guess(self) -> str:
+        """Gætter med det mest frekvente ord fra listen over gyldige inputs,
+        så længe det ikke er blevet brugt før."""
+        self.candidates = sorted(self.dictionary.keys(), key=lambda x: -self.dictionary[x])
+        for word in self.candidates:
+            if word not in self.history:
+                return word
+        else:
+            return self.rand_brute_guess()
+
+    # def lfreq_brute_guess(self) -> str:
+    #     """Gætter med ordet med mest frekvente bogstaver fra listen over gyldige inputs."""
+    #     return self.logic_guess()
 
     # action 7
-    def rand_dict_guess(self) -> str:
+    def rand_brute_guess(self) -> str:
+        """Gætter med et tilfældigt ord fra listen over gyldige inputs,
+        så længe det ikke er blevet brugt før."""
+        dictionary = tuple(self.dictionary.keys())
+        while (guess := random.choice(dictionary)) in self.history:
+            guess = random.choice(dictionary)
+        return guess
+
+    # action 8
+    def rand_guess(self) -> str:
         """Gætter med et tilfældigt ord fra listen over gyldige inputs."""
-        return random.choice(tuple(self.dictionary.keys()))
+        dictionary = tuple(self.dictionary.keys())
+        return random.choice(dictionary)
 
     def generate_guess(self) -> str:
         # Angivne standardgæt
@@ -295,6 +316,19 @@ class WordleSolver(Wordle):
 
     def _initial_candidates(self) -> list[str]:
         return self._sort_candidate_list(self._generate_candidate_list(self._find_basic_candidates()))
+
+    def _logic_guess(self) -> None:
+        # Kigger på nuværende tilstand - er der nok grønne og gule til at indsnævre antallet af kandidater?
+        if self.lost and self.green + len(self.lost) == self.word_length:
+            pattern = self._lost_and_found()
+        else:
+            pattern = self._find_candidates()
+        candidate_list = self._generate_candidate_list(pattern)
+        # Se, om der kan fjernes kandidater, hvis de ikke 
+        if self.lost:
+            candidate_list = self._check_candidate_list(candidate_list)
+        # Sortér efter frekvens
+        self.candidates = self._sort_candidate_list(candidate_list)
 
     def compare(self, guess: str) -> None:
         # Opdatér historik
@@ -388,8 +422,9 @@ if __name__ == "__main__":
     solve_steps.update({k: Counter() for k in range(3,13)})
     solve_steps.update({"hapax_legomenon": Counter()})
 
-    # wm = Wordle()
-    # wm.play()
+    wm = WordleSolver()
+    print(wm.wfreq_dict_guess())
+    input()
 
     for i, word in enumerate(words):
         wg = WordleSolver(
