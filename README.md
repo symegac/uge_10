@@ -24,13 +24,26 @@ Man har seks forsøg til at gætte et engelsk ord på fem bogstaver. Ca. 2000 or
 #### Actions
 I min kode har jeg lavet funktioner for flere forskellige strategier, som det neurale netværk kan vælge imellem:
 1. Prædefineret
-    * Udvalgt pga. deres indhold af de hyppigstee bogstaver i engelske, hvilket giver god information om ordets fonotaktiske struktur.
+    * Udvalgt pga. deres indhold af de hyppigste bogstaver i engelske, hvilket giver god information om ordets fonotaktiske struktur.
+    * `WordleSolver.default_guess()`
+    * `WordleSolver.rand_default_guess()`
 2. Logisk
     * Her kigges der der på gættehistorikken, resultathukommelsen og nuværende tilstand, og et ord udvælges ud fra en liste af mulige kandidater.
+    * `WordleSolver.logic_guess()`
+    * `WordleSolver.rand_logic_guess()`
 3. Statistisk
     * Her kigges der kun på resultathukommelsen, og et ord udvælges ud fra dets forekomstfrekvens i engelsksprogede tekster.
-4. Tilfældig
-    * Her vælges der fuldstændig tilfældigt et ord fra listen over gyldige gæt.
+    * `WordleSolver.stat_guess()`
+    * `WordleSolver.rand_stat_guess()`
+4. Brute-force
+    * Her kigges der kun på gættehistorikken, og det mest hyppige endnu ikke-gættede ord vælges.
+    * `WordleSolver.brute_guess()`
+    * `WordleSolver.rand_brute_guess()`
+5. Tilfældig
+    * Her vælges der fuldstændig tilfældigt et ord ud fra listen af gyldige gæt.
+    * `WordleSolver.rand_guess()`
+
+Der er altså i alt 9 forskellige strategier.
 
 #### States
 ##### Gættehistorik
